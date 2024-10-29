@@ -183,7 +183,7 @@ class Hollywood_UCFDataset(Dataset):
 def get_dataloader(root:str, mode:str, task:str,
 				   datasetName_list:list=None, 
 				   with_audio:bool=True,
-				   batch_size:int=1, num_workers:int=0,
+				   batch_size:int=16, num_workers:int=4,
 				   sample_size:int=(384,224),			# 输入尺寸
 				   sample_duration:int=32,		# 最终采样长度
 				   step_duration:int=90,		# 空余采样长度
@@ -199,8 +199,8 @@ def get_dataloader(root:str, mode:str, task:str,
 	
 	if task == 'domain_increase':
 		if datasetName_list == None:
-			# datasetName_list = ['Coutrot_db1', 'Coutrot_db2', 'SumMe', 'ETMD_av', 'AVAD', 'DHKF-1k', 'Hollywood']	# miss DIEM
-			datasetName_list = ['AVAD',"AVAD"]	# miss DIEM
+			datasetName_list = ['Coutrot_db1', 'Coutrot_db2', 'SumMe', 'ETMD_av', 'AVAD', 'DHKF-1k', 'Hollywood']	# miss DIEM
+			# datasetName_list = ['AVAD',"AVAD"]	# miss DIEM
 			# 由于每个任务需要的学习轮数不同，需要手动配置训练的数据集名称和顺序，选择训练较好的权重，进行持续训练。
 		else:
 			for i in datasetName_list:
