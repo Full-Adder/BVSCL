@@ -31,10 +31,9 @@ if __name__ == "__main__":
     #  target['salmap'] = torch.ones(8, 1, 112, 112)
     print(f"use {platform.system()}, torch {torch.__version__}, torchvision {torchvision.__version__}, torchaudio {torchaudio.__version__}")
     for task in task_list:
-        data_loader = get_dataloader(root=saliency_path, mode='val', task=task)
+        data_loader,_ = get_dataloader(root=saliency_path, mode='val', task=task)
         print(f"{task= }, {len(data_loader)= }")
-        for i,v in enumerate(data_loader[0]):
-            print(v)
+        for i,(data, target, vail) in enumerate(data_loader[0]):
             print(i, data['rgb'].shape, data['audio'].shape, target['salmap'].shape, target['binmap'].shape)
             cc = CC( target['salmap'], target['salmap'])
             nss = NSS( target['salmap'], target['binmap'])
