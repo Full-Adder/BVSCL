@@ -11,6 +11,10 @@ import copy
 from functools import reduce, lru_cache
 from operator import mul
 from einops import rearrange
+from torch.xpu import device
+
+from model.memoryBank import *
+from model.Mul_adapter import *
 
 
 class Mlp(nn.Module):
@@ -504,7 +508,8 @@ class SwinTransformer3D(nn.Module):
                  norm_layer=nn.LayerNorm,
                  patch_norm=False,
                  frozen_stages=-1,
-                 use_checkpoint=False):
+                 use_checkpoint=False,
+                 MB_path = './'):
         super().__init__()
 
         self.pretrained = pretrained
@@ -515,7 +520,7 @@ class SwinTransformer3D(nn.Module):
         self.frozen_stages = frozen_stages
         self.window_size = window_size
         self.patch_size = patch_size
-        self.soundnet8 =  self.soundnet8 = nn.Sequential(
+        self.soundnet8  = nn.Sequential(
             nn.Conv2d(1, 16, (1, 64), (1, 2), (0, 32)),
             nn.BatchNorm2d(16),
             nn.ReLU(),
@@ -555,6 +560,8 @@ class SwinTransformer3D(nn.Module):
 
         # build layers
         self.layers = nn.ModuleList()
+        self.memorybanks = []
+        self.adapters = []
         for i_layer in range(self.num_layers):
             layer = BasicLayer(
                 dim=int(embed_dim * 2 ** i_layer),
@@ -571,6 +578,11 @@ class SwinTransformer3D(nn.Module):
                 downsample=PatchMerging if i_layer < self.num_layers - 1 else None,
                 use_checkpoint=use_checkpoint)
             self.layers.append(layer)
+            self.memorybanks.append(MemoryBank(f'{i_layer}').to('cuda'))
+            hed = [192,384,768,768]
+            lr = torch.randn(10)
+            self.adapters.append(MulAdapter(hed[i_layer], lr).to('cuda'))
+
 
         self.num_features = int(embed_dim * 2 ** (self.num_layers - 1))
 
@@ -642,7 +654,7 @@ class SwinTransformer3D(nn.Module):
         else:
             raise TypeError('pretrained must be a str or None')
 
-    def forward(self, x, aud):
+    def forward(self, x, aud, tar=None, task_id=None):
         """Forward function."""
         layer_features = []
         x = self.patch_embed(x) #torch.Size([8, 96, 16, 96, 56])
@@ -651,9 +663,16 @@ class SwinTransformer3D(nn.Module):
         x = x+F.interpolate(aud, size=(x.shape[2], 96, 56))
         x = self.pos_drop(x)
 
-        for layer in self.layers:
+        for num, layer in enumerate(self.layers):
             x, x1 = layer(x.contiguous())
+            x1 = self.memorybanks[num](x1, tar)
+            # torch.Size([1, 192, 16, 48, 28]) torch.Size([1, 96, 16, 96, 56])
+            # torch.Size([1, 384, 16, 24, 14]), torch.Size([1, 192, 16, 48, 28]
+            # torch.Size([1, 768, 16, 12, 7]), torch.Size([1, 384, 16, 24, 14])
+            # torch.Size([1, 768, 16, 12, 7]), torch.Size([1, 768, 16, 12, 7])
+
             layer_features.append(x1)
+            x = self.adapters[num](x, task_id)
 
         x = rearrange(x, 'n c d h w -> n d h w c')
         x = self.norm(x)

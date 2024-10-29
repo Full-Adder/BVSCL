@@ -60,7 +60,7 @@ parser.add_argument('--dataset', default='domain_increase', type=str)
 parser.add_argument('--alternate', default=1, type=int)
 args = parser.parse_args()
 
-def train(model, optimizer, loader, epoch, device, args, writer):
+def train(model, optimizer, loader, epoch, device, args, writer,t_id):
     model.train()
 
     total_loss = AverageMeter()
@@ -78,7 +78,7 @@ def train(model, optimizer, loader, epoch, device, args, writer):
         gt_bin = gt_bin.to(device)
 
         optimizer.zero_grad()
-        z0 = model(img_clips, audio)
+        z0 = model(img_clips, audio, gt_sal, t_id)
 
         assert z0.size() == gt_sal.size()
         loss = loss_func(z0, gt_sal,gt_bin, args)
@@ -111,14 +111,17 @@ def validate(model, loader, epoch, device, args, writer):
     for idx,(sample, target, vail) in enumerate(loader):
         img_clips = sample['rgb']
         audio = sample['audio']
-        gt_sal = target['salmap']
-        gt_bin = target['binmap']
+        gt_sal = target['salmap'][:,0]
+        gt_bin = target['binmap'][:,0]
         img_clips = img_clips.to(device)
+        audio = audio.to(device)
+        gt_sal = gt_sal.to(device)
+        gt_bin = gt_bin.to(device)
         img_clips = img_clips.permute((0, 2, 1, 3, 4))
 
-        pred_sal = model(img_clips, audio)
+        pred_sal = model(img_clips,audio, task_id = -1)
 
-        gt_sal = gt_sal.squeeze(0).numpy()
+        gt_sal = gt_sal.cpu().squeeze(0).numpy()
         pred_sal = pred_sal.cpu().squeeze(0).numpy()
         pred_sal = cv2.resize(pred_sal, (gt_sal.shape[1], gt_sal.shape[0]))
         pred_sal = blur(pred_sal).unsqueeze(0).cuda()
@@ -144,8 +147,8 @@ def validate(model, loader, epoch, device, args, writer):
 
 
 if __name__ == '__main__':
-    train_dataloader = get_dataloader(root=args.saliency_path, mode='train', task=args.dataset)
-    val_dataloader = get_dataloader(root=args.saliency_path, mode='val', task=args.dataset)
+    train_dataloaders, datasetName_list = get_dataloader(root=args.saliency_path, mode='train', task=args.dataset)
+    val_dataloaders,_ = get_dataloader(root=args.saliency_path, mode='val', task=args.dataset)
 
     model = VideoSaliencyModel(pretrain=args.load_path)
 
@@ -163,17 +166,20 @@ if __name__ == '__main__':
 
     writer = SummaryWriter('logs')
     best_loss = 0
-    for epoch in range(0, args.no_epochs):
-        loss = train(model, optimizer, train_dataloader, epoch, device, args, writer)
-        if epoch % 3 == 0:
-            with torch.no_grad():
-                cc_loss = validate(model, val_dataloader, epoch, device, args, writer)
-                if epoch == 0:
-                    best_loss = cc_loss
-                if best_loss < cc_loss:
-                    best_loss = cc_loss
-                    if torch.cuda.device_count() > 1:
-                        torch.save(model.module.state_dict(), args.model_val_path + 'best_Net.pth'.format(epoch))
-                    else:
-                        torch.save(model.state_dict(), args.model_val_path + 'best_Net.pth'.format(epoch))
-    writer.close()
+    print(datasetName_list)
+    for t_id, (tname, train_dataloader, val_dataloader) in enumerate(zip(datasetName_list, train_dataloaders, val_dataloaders)):
+        print('==> now train and val on', tname)
+        for epoch in range(0, args.no_epochs):
+            loss = train(model, optimizer, train_dataloader, epoch, device, args, writer,t_id)
+            if epoch % 3 == 0:
+                with torch.no_grad():
+                    cc_loss = validate(model, val_dataloader, epoch, device, args, writer)
+                    if epoch == 0:
+                        best_loss = cc_loss
+                    if best_loss < cc_loss:
+                        best_loss = cc_loss
+                        if torch.cuda.device_count() > 1:
+                            torch.save(model.module.state_dict(), args.model_val_path + 'best_Net.pth'.format(epoch))
+                        else:
+                            torch.save(model.state_dict(), args.model_val_path + 'best_Net.pth'.format(epoch))
+        writer.close()

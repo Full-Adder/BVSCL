@@ -26,8 +26,8 @@ class VideoSaliencyModel(nn.Module):
         self.backbone = SwinTransformer3D(pretrained=pretrain)
         self.decoder = DecoderConvUp()
 
-    def forward(self, x, au):
-        x, [y1, y2, y3, y4] = self.backbone(x, au)
+    def forward(self, x, au, tar=None, task_id=-1):
+        x, [y1, y2, y3, y4] = self.backbone(x, au, tar, task_id)
 
         return self.decoder(x, y3, y2, y1)
 

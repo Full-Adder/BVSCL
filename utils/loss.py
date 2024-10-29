@@ -145,7 +145,7 @@ def auc_judd(saliencyMap, fixationMap, jitter=True, toPlot=False, normalize=Fals
         saliencyMap = normalize_map(saliencyMap)
 
     if not fixationMap.any():
-        print('Error: no fixationMap')
+        # print('Error: no fixationMap')
         score = float('nan')
         return score
 
@@ -168,7 +168,6 @@ def auc_judd(saliencyMap, fixationMap, jitter=True, toPlot=False, normalize=Fals
                   / (saliencyMap.max() - saliencyMap.min())
 
     if np.isnan(saliencyMap).all():
-        print('NaN saliencyMap')
         score = float('nan')
         return score
 

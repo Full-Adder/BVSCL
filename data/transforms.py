@@ -64,7 +64,7 @@ def SpatialTransform(mode, crop_size):
         return Compose([
             ToImage(),
             ToDtype(torch.uint8, scale=True),
-            Resize((crop_size, crop_size)),
+            Resize(crop_size),
             ToDtype(torch.float32, scale=True),
         ])
     
